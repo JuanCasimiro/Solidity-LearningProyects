@@ -25,3 +25,8 @@ function _multiply(uint a, uint b) private pure returns (uint) {
 This function doesn't even read from the state of the app — its return value depends only on its function parameters. So in this case we would declare the function as pure.
 
 Note: It may be hard to remember when to mark functions as pure/view. Luckily the Solidity compiler is good about issuing warnings to let you know when you should use one of these modifiers.
+
+
+**msg.sender**
+In Solidity, there are certain global variables that are available to all functions. One of these is msg.sender, which refers to the address of the person (or smart contract) who called the current function.
+
