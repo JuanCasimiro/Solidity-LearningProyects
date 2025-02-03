@@ -30,3 +30,10 @@ Note: It may be hard to remember when to mark functions as pure/view. Luckily th
 **msg.sender**
 In Solidity, there are certain global variables that are available to all functions. One of these is msg.sender, which refers to the address of the person (or smart contract) who called the current function.
 
+Let's recap:
+We've added a way to update our CryptoKitties contracts
+We've learned to protect core functions with onlyOwner
+We've learned about gas and gas optimization
+We added levels and cooldowns to our zombies
+We now have functions to update a zombie's name and DNA once the zombie gets above a certain level
+And finally, we now have a function to return a user's zombie army
