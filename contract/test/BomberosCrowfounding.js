@@ -1,5 +1,5 @@
 const { expect } = require("chai");
-const { ethers } = require("hardhat");
+const { ethers, network } = require("hardhat");
 
 describe("FirefighterCrowdfunding", function () {
   let FirefighterCrowdfunding;
@@ -8,18 +8,19 @@ describe("FirefighterCrowdfunding", function () {
   let contributor1;
   let contributor2;
   let whitelistAddress;
+  let nonWhitelistAddress;
   let campaignId;
 
   beforeEach(async function () {
     // Obtener las direcciones de los participantes
-    [owner, contributor1, contributor2, whitelistAddress] = await ethers.getSigners();
+    [owner, contributor1, contributor2, whitelistAddress, nonWhitelistAddress] = await ethers.getSigners();
 
     // Desplegar el contrato antes de cada test
     FirefighterCrowdfunding = await ethers.getContractFactory("FirefighterCrowdfunding");
     crowdfunding = await FirefighterCrowdfunding.deploy({ gasLimit: 12000000 });
 
+    // Agregar whitelistAddress a la whitelist
     await crowdfunding.setWhitelist(whitelistAddress.address, true);
-    // Asegurarse de que el contrato esté desplegado correctamente
   });
 
   describe("setWhitelist", function () {
@@ -30,6 +31,29 @@ describe("FirefighterCrowdfunding", function () {
       await crowdfunding.setWhitelist(whitelistAddress.address, false);
       expect(await crowdfunding.whitelist(whitelistAddress.address)).to.be.false;
     });
+
+    it("should revert if a non-owner attempts to modify the whitelist", async function () {
+      await expect(
+        crowdfunding.connect(contributor1).setWhitelist(nonWhitelistAddress.address, true)
+      ).to.be.revertedWithCustomError(crowdfunding, "OwnableUnauthorizedAccount")
+      .withArgs(contributor1.address);
+    });
+  });
+
+  describe("setNFTThreshold", function () {
+    it("should update the NFT threshold", async function () {
+      const newThreshold = ethers.parseEther("2");
+      await crowdfunding.setNFTThreshold(newThreshold);
+      expect(await crowdfunding.nftThreshold()).to.equal(newThreshold);
+    });
+
+    it("should revert if a non-owner attempts to update NFT threshold", async function () {
+      const newThreshold = ethers.parseEther("2");
+      await expect(
+        crowdfunding.connect(contributor1).setNFTThreshold(newThreshold)
+      ).to.be.revertedWithCustomError(crowdfunding, "OwnableUnauthorizedAccount")
+      .withArgs(contributor1.address);
+    });
   });
 
   describe("createCampaign", function () {
@@ -39,14 +63,12 @@ describe("FirefighterCrowdfunding", function () {
       const goal = ethers.parseEther("5");
       const duration = 60 * 60 * 24; // 1 day
 
-      // Create campaign
       await expect(
         crowdfunding.connect(whitelistAddress).createCampaign(title, description, goal, duration)
       )
         .to.emit(crowdfunding, "CampaignCreated")
         .withArgs(1, whitelistAddress.address, title, goal, duration);
 
-      // Check if campaign was created
       const campaign = await crowdfunding.campaigns(1);
       expect(campaign.creator).to.equal(whitelistAddress.address);
       expect(campaign.title).to.equal(title);
@@ -62,6 +84,28 @@ describe("FirefighterCrowdfunding", function () {
       await expect(
         crowdfunding.connect(contributor1).createCampaign(title, description, goal, duration)
       ).to.be.revertedWith("Not authorized to create campaigns");
+    });
+
+    it("should revert if the campaign goal is zero", async function () {
+      const title = "Test Campaign";
+      const description = "Test description";
+      const goal = 0;
+      const duration = 60 * 60 * 24; // 1 day
+
+      await expect(
+        crowdfunding.connect(whitelistAddress).createCampaign(title, description, goal, duration)
+      ).to.be.revertedWith("Goal must be greater than zero");
+    });
+
+    it("should revert if the campaign duration is zero", async function () {
+      const title = "Test Campaign";
+      const description = "Test description";
+      const goal = ethers.parseEther("1");
+      const duration = 0;
+
+      await expect(
+        crowdfunding.connect(whitelistAddress).createCampaign(title, description, goal, duration)
+      ).to.be.revertedWith("Duration must be greater than zero");
     });
   });
 
@@ -94,7 +138,6 @@ describe("FirefighterCrowdfunding", function () {
         crowdfunding.connect(contributor1).contribute(campaignId, { value: contributionAmount })
       ).to.emit(crowdfunding, "NFTMinted").withArgs(contributor1.address, 0);
 
-      // Check NFT balance
       const balance = await crowdfunding.balanceOf(contributor1.address);
       expect(balance).to.equal(1);
     });
@@ -103,6 +146,56 @@ describe("FirefighterCrowdfunding", function () {
       await expect(
         crowdfunding.connect(contributor1).contribute(campaignId, { value: 0 })
       ).to.be.revertedWith("Contribution must be greater than zero");
+    });
+
+    it("should revert if campaign does not exist", async function () {
+      await expect(
+        crowdfunding.connect(contributor1).contribute(999, { value: ethers.parseEther("1") })
+      ).to.be.revertedWith("Campaign does not exist");
+    });
+
+    it("should revert if campaign has ended", async function () {
+      await network.provider.send("evm_increaseTime", [60 * 60 * 24]);
+      await network.provider.send("evm_mine");
+
+      await expect(
+        crowdfunding.connect(contributor1).contribute(campaignId, { value: ethers.parseEther("1") })
+      ).to.be.revertedWith("Campaign has ended");
+    });
+
+    it("should update contributions mapping correctly for multiple contributions from the same user", async function () {
+      const contribution1 = ethers.parseEther("0.5");
+      const contribution2 = ethers.parseEther("0.7");
+
+      await crowdfunding.connect(contributor1).contribute(campaignId, { value: contribution1 });
+      await crowdfunding.connect(contributor1).contribute(campaignId, { value: contribution2 });
+
+      const campaign = await crowdfunding.campaigns(campaignId);
+      expect(campaign.fundsRaised.toString()).to.equal(ethers.parseEther("1.2").toString());
+
+      const userContribution = await crowdfunding.contributions(campaignId, contributor1.address);
+      expect(userContribution.toString()).to.equal(ethers.parseEther("1.2").toString());
+    });
+
+    it("should mint NFT only once even after multiple contributions that exceed the threshold", async function () {
+      const contribution1 = ethers.parseEther("0.6");
+      const contribution2 = ethers.parseEther("0.5");
+      const contribution3 = ethers.parseEther("0.5");
+
+      await expect(
+        crowdfunding.connect(contributor1).contribute(campaignId, { value: contribution1 })
+      ).not.to.emit(crowdfunding, "NFTMinted");
+
+      await expect(
+        crowdfunding.connect(contributor1).contribute(campaignId, { value: contribution2 })
+      ).to.emit(crowdfunding, "NFTMinted").withArgs(contributor1.address, 0);
+
+      await expect(
+        crowdfunding.connect(contributor1).contribute(campaignId, { value: contribution3 })
+      ).not.to.emit(crowdfunding, "NFTMinted");
+
+      const balance = await crowdfunding.balanceOf(contributor1.address);
+      expect(balance).to.equal(1);
     });
   });
 
@@ -116,38 +209,28 @@ describe("FirefighterCrowdfunding", function () {
       await crowdfunding.connect(whitelistAddress).createCampaign(title, description, goal, duration);
       campaignId = 1;
 
-      // Contribute to the campaign
       const contributionAmount = ethers.parseEther("2");
       await crowdfunding.connect(contributor1).contribute(campaignId, { value: contributionAmount });
+    console.log(await crowdfunding.getFundsRaised(campaignId));
     });
+  
+    it("should return the correct funds raised for a campaign", async function () {
+        const fundsRaised = await crowdfunding.getFundsRaised(campaignId);
+        expect(fundsRaised.toString()).to.equal(ethers.parseEther("2").toString());
+      });
 
     it("should allow campaign creator to withdraw funds after deadline", async function () {
-      // Fast forward time to after the deadline
       await network.provider.send("evm_increaseTime", [60 * 60 * 24]);
       await network.provider.send("evm_mine");
 
       const initialBalance = await ethers.provider.getBalance(whitelistAddress.address);
-      console.log("Initial Balance:", ethers.formatEther(initialBalance), "ETH"); 
-
-      const contractBalance = await ethers.provider.getBalance(crowdfunding.target);
-      console.log("Contract Initial Balance:", ethers.formatEther(contractBalance), "ETH");
 
       await expect(
         crowdfunding.connect(whitelistAddress).withdrawFunds(campaignId)
       ).to.emit(crowdfunding, "Withdrawn").withArgs(campaignId, ethers.parseEther("2"));
 
-      const fundsRaised = await crowdfunding.campaigns(campaignId);
-      console.log("Funds Raised:", ethers.formatEther(fundsRaised.fundsRaised), "ETH");
-
-      let finalBalance = await ethers.provider.getBalance(whitelistAddress.address);
-      console.log("Final Balance:", ethers.formatEther(finalBalance), "ETH");
-      const contractFinalBalance = await ethers.provider.getBalance(crowdfunding.target);
-      console.log("Contract Final Balance:", ethers.formatEther(contractFinalBalance), "ETH");
-      
-      expect(BigInt(finalBalance.toString())
-        ).to.be.greaterThan(
-        BigInt(initialBalance.toString())
-    );
+      const finalBalance = await ethers.provider.getBalance(whitelistAddress.address);
+      expect(BigInt(finalBalance.toString())).to.be.greaterThan(BigInt(initialBalance.toString()));
     });
 
     it("should revert if non-creator tries to withdraw funds", async function () {
@@ -170,6 +253,12 @@ describe("FirefighterCrowdfunding", function () {
       await expect(
         crowdfunding.connect(whitelistAddress).withdrawFunds(campaignId)
       ).to.be.revertedWith("Funds already withdrawn");
+    });
+
+    it("should revert if trying to withdraw funds from a non-existent campaign", async function () {
+      await expect(
+        crowdfunding.connect(whitelistAddress).withdrawFunds(999)
+      ).to.be.revertedWith("Campaign does not exist");
     });
   });
 });

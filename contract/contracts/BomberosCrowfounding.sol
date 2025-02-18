@@ -4,8 +4,9 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract FirefighterCrowdfunding is Ownable, ERC721 {
+contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
     struct Campaign {
         address payable creator;
         string title;
@@ -21,7 +22,8 @@ contract FirefighterCrowdfunding is Ownable, ERC721 {
     
     mapping(uint256 => mapping(address => uint256)) public contributions;
     mapping(address => bool) public whitelist;
-    mapping(address => bool) public nftClaimed;
+    mapping(uint256 => mapping(address => bool)) public nftClaimed;
+
     
     uint256 public nftThreshold = 1 ether; // Monto mínimo para recibir NFT
     uint256 private nextTokenId;
@@ -72,20 +74,23 @@ contract FirefighterCrowdfunding is Ownable, ERC721 {
         require(_campaignId > 0 && _campaignId <= campaignCount, "Campaign does not exist");
         require(msg.value > 0, "Contribution must be greater than zero");
         require(block.timestamp < campaigns[_campaignId].deadline, "Campaign has ended");
+        require(!campaigns[_campaignId].withdrawn, "Funds already withdrawn");
+
         
         campaigns[_campaignId].fundsRaised += msg.value;
         contributions[_campaignId][msg.sender] += msg.value;
         
         // Mintear NFT si supera el umbral
-        if (contributions[_campaignId][msg.sender] >= nftThreshold && !nftClaimed[msg.sender]) {
+        if (contributions[_campaignId][msg.sender] >= nftThreshold && !nftClaimed[_campaignId][msg.sender]) {
             _mintNFT(msg.sender);
-            nftClaimed[msg.sender] = true;
+            nftClaimed[_campaignId][msg.sender] = true;
         }
+
         
         emit Funded(_campaignId, msg.sender, msg.value);
     }
     
-    function withdrawFunds(uint256 _campaignId) public {
+    function withdrawFunds(uint256 _campaignId) public nonReentrant {
         // Verificar que la campaña existe
         require(_campaignId > 0 && _campaignId <= campaignCount, "Campaign does not exist");
 
@@ -93,10 +98,13 @@ contract FirefighterCrowdfunding is Ownable, ERC721 {
         require(msg.sender == campaign.creator, "Only the creator can withdraw funds");
         require(block.timestamp >= campaign.deadline, "Cannot withdraw before deadline");
         require(!campaign.withdrawn, "Funds already withdrawn");
+        require(campaign.fundsRaised > campaign.goal, "Campaign dont reach the goal");
         
         campaign.withdrawn = true;
         uint256 amount = campaign.fundsRaised;
-        campaign.creator.transfer(amount);
+        
+        (bool success, ) = campaign.creator.call{value: amount}("");
+        require(success, "Transfer failed");
         
         emit Withdrawn(_campaignId, amount);
     }
@@ -110,6 +118,42 @@ contract FirefighterCrowdfunding is Ownable, ERC721 {
  
     function getFundsRaised(uint256 _campaignId) public view returns (uint256) {
         return campaigns[_campaignId].fundsRaised;
+    }
+
+    function refund(uint256 _campaignId) public nonReentrant {
+        require(_campaignId > 0 && _campaignId <= campaignCount, "Campaign does not exist");
+        Campaign storage campaign = campaigns[_campaignId];
+        require(block.timestamp >= campaign.deadline, "Campaign is still active");
+        require(campaign.fundsRaised < campaign.goal, "Campaign was successful, no refunds");
+
+        uint256 amount = contributions[_campaignId][msg.sender];
+        require(amount > 0, "No funds to refund");
+
+        contributions[_campaignId][msg.sender] = 0;
+
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Refund failed");
+    }
+
+    function getCampaign(uint256 _campaignId) public view returns (
+        address creator, 
+        string memory title, 
+        string memory description, 
+        uint256 goal, 
+        uint256 deadline, 
+        uint256 fundsRaised, 
+        bool withdrawn
+    ) {
+        Campaign storage campaign = campaigns[_campaignId];
+        return (
+            campaign.creator,
+            campaign.title,
+            campaign.description,
+            campaign.goal,
+            campaign.deadline,
+            campaign.fundsRaised,
+            campaign.withdrawn
+        );
     }
 
 }
