@@ -1,0 +1,17 @@
+{
+    "name": "Mi NFT 3D #1",
+    "description": "Este NFT muestra un modelo 3D en formato .glb.",
+
+    "animation_url": "ipfs://bafybeicv2squnnot7l4vvnihbswfx4lyzutkno7346ufig4uujw4lfbn7u",
+    "attributes": [
+      {
+        "trait_type": "Modelo",
+        "value": "3D"
+      },
+      {
+        "trait_type": "Rareza",
+        "value": "Único"
+      }
+    ]
+  }
+  

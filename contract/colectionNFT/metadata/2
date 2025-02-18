@@ -1,0 +1,11 @@
+{
+    "name": "Horse Love NFT #2",
+    "description": "Horse Love",
+    "image": "ipfs://bafybeif7d4k3obuhuclk7vv2nt7pcdy6bolvgrqyzm6bdg4mvourjlyrru/2.jpg",
+    "attributes": [
+      {
+        "trait_type": "Rareza",
+        "value": "Legendary"
+      }
+    ]
+  }
