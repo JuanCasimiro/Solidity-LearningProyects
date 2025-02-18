@@ -13,6 +13,7 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
         string description;
         uint256 goal;
         uint256 deadline;
+        uint256 claimDeadline; // Nuevo parámetro para el plazo de 15 días
         uint256 fundsRaised;
         bool withdrawn;
     }
@@ -24,7 +25,6 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
     mapping(address => bool) public whitelist;
     mapping(uint256 => mapping(address => bool)) public nftClaimed;
 
-    
     uint256 public nftThreshold = 1 ether; // Monto mínimo para recibir NFT
     uint256 private nextTokenId;
     
@@ -57,12 +57,14 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
         require(_duration > 0, "Duration must be greater than zero");
         
         campaignCount++;
+        uint256 campaignDeadline = block.timestamp + _duration;
         campaigns[campaignCount] = Campaign(
             payable(msg.sender),
             _title,
             _description,
             _goal,
-            block.timestamp + _duration,
+            campaignDeadline,
+            campaignDeadline + 15 days, // Establecemos el plazo de 15 días
             0,
             false
         );
@@ -91,17 +93,18 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
     }
     
     function withdrawFunds(uint256 _campaignId) public nonReentrant {
-        // Verificar que la campaña existe
         require(_campaignId > 0 && _campaignId <= campaignCount, "Campaign does not exist");
 
         Campaign storage campaign = campaigns[_campaignId];
         require(msg.sender == campaign.creator, "Only the creator can withdraw funds");
         require(block.timestamp >= campaign.deadline, "Cannot withdraw before deadline");
         require(!campaign.withdrawn, "Funds already withdrawn");
-        require(campaign.fundsRaised > campaign.goal, "Campaign dont reach the goal");
-        
-        campaign.withdrawn = true;
+
+        // Permitir retiro después del período de reembolso
+        require(block.timestamp > campaign.claimDeadline || campaign.fundsRaised >= campaign.goal, "Refund period still open");
+
         uint256 amount = campaign.fundsRaised;
+        campaign.withdrawn = true;
         
         (bool success, ) = campaign.creator.call{value: amount}("");
         require(success, "Transfer failed");
@@ -124,6 +127,7 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
         require(_campaignId > 0 && _campaignId <= campaignCount, "Campaign does not exist");
         Campaign storage campaign = campaigns[_campaignId];
         require(block.timestamp >= campaign.deadline, "Campaign is still active");
+        require(block.timestamp <= campaign.claimDeadline, "Refund period has expired"); // Solo durante los 15 días después del deadline
         require(campaign.fundsRaised < campaign.goal, "Campaign was successful, no refunds");
 
         uint256 amount = contributions[_campaignId][msg.sender];
