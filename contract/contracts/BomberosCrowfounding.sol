@@ -72,7 +72,7 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
         emit CampaignCreated(campaignCount, msg.sender, _title, _goal, _duration);
     }
     
-    function contribute(uint256 _campaignId) public payable {
+    function contribute(uint256 _campaignId) public payable nonReentrant{
         require(_campaignId > 0 && _campaignId <= campaignCount, "Campaign does not exist");
         require(msg.value > 0, "Contribution must be greater than zero");
         require(block.timestamp < campaigns[_campaignId].deadline, "Campaign has ended");
@@ -83,7 +83,7 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
         contributions[_campaignId][msg.sender] += msg.value;
         
         // Mintear NFT si supera el umbral
-        if (contributions[_campaignId][msg.sender] >= nftThreshold && !nftClaimed[_campaignId][msg.sender]) {
+        if (contributions[_campaignId][msg.sender] > nftThreshold && !nftClaimed[_campaignId][msg.sender]) {
             _mintNFT(msg.sender);
             nftClaimed[_campaignId][msg.sender] = true;
         }
@@ -118,10 +118,6 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
         nextTokenId++;
         emit NFTMinted(recipient, tokenId);
     }
- 
-    function getFundsRaised(uint256 _campaignId) public view returns (uint256) {
-        return campaigns[_campaignId].fundsRaised;
-    }
 
     function refund(uint256 _campaignId) public nonReentrant {
         require(_campaignId > 0 && _campaignId <= campaignCount, "Campaign does not exist");
@@ -137,6 +133,18 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
 
         (bool success, ) = payable(msg.sender).call{value: amount}("");
         require(success, "Refund failed");
+    }
+ 
+    function getFundsRaised(uint256 _campaignId) public view returns (uint256) {
+        return campaigns[_campaignId].fundsRaised;
+    }
+
+    function getCampaigns() public view returns (uint256[] memory) {
+        uint256[] memory campaignIds = new uint256[](campaignCount);
+        for (uint256 i = 1; i <= campaignCount; i++) {
+            campaignIds[i - 1] = i;
+        }
+        return campaignIds;
     }
 
     function getCampaign(uint256 _campaignId) public view returns (
