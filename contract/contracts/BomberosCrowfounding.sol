@@ -16,6 +16,7 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
         uint256 claimDeadline; // Nuevo parámetro para el plazo de 15 días
         uint256 fundsRaised;
         bool withdrawn;
+        string imageURL;
     }
 
     mapping(uint256 => Campaign) public campaigns;
