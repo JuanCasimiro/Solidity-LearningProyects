@@ -1,138 +1,216 @@
-FirefighterCrowdfunding Contract API Documentation
-The FirefighterCrowdfunding contract is a Solidity-based smart contract designed to facilitate crowdfunding campaigns for firefighters. It includes features such as campaign creation, contributions, refunds, fund withdrawals, and NFT rewards for contributors who meet a specified threshold. Below is the detailed API documentation for the methods available in the contract.
+# Firefighter Crowdfunding
 
-Structs
-Campaign
-Represents the details of a crowdfunding campaign:
+Plataforma de Donaciones Blockchain para Bomberos que garantiza transparencia, seguridad y eficiencia en la recaudación de fondos para apoyar a los héroes que protegen a nuestras comunidades.
 
-creator: The address of the campaign creator.
-title: The title of the campaign.
-description: A description of the campaign.
-goal: The funding goal of the campaign (in wei).
-deadline: The timestamp when the campaign ends.
-claimDeadline: The timestamp after which funds can be withdrawn (15 days after the deadline).
-fundsRaised: The total amount of funds raised so far.
-withdrawn: A boolean indicating whether the funds have been withdrawn.
-Mappings
-campaigns : Maps campaign IDs to their respective Campaign structs.
-contributions : Tracks contributions made by users for each campaign (campaignId => contributorAddress => contributionAmount).
-whitelist : Tracks whether an address is authorized to create campaigns (address => bool).
-nftClaimed : Tracks whether a user has already claimed an NFT for a specific campaign (campaignId => contributorAddress => bool).
-State Variables
-campaignCount : Tracks the total number of campaigns created.
-nftThreshold : The minimum contribution required to receive an NFT (default: 1 ether).
-nextTokenId : Tracks the next token ID for minting NFTs.
-Events
-CampaignCreated(uint256 campaignId, address creator, string title, uint256 goal, uint256 deadline)
-Emitted when a new campaign is created.
-Funded(uint256 campaignId, address contributor, uint256 amount)
-Emitted when a user contributes to a campaign.
-Withdrawn(uint256 campaignId, uint256 amount)
-Emitted when the campaign creator withdraws funds.
-Whitelisted(address account, bool status)
-Emitted when an address is added or removed from the whitelist.
-NFTMinted(address recipient, uint256 tokenId)
-Emitted when an NFT is minted for a contributor.
-NFTThresholdUpdated(uint256 newThreshold)
-Emitted when the NFT threshold is updated.
-Modifiers
-onlyWhitelisted
-Ensures that only whitelisted addresses can create campaigns.
-nonReentrant
-Prevents reentrancy attacks in functions like contribute, withdrawFunds, and refund.
-Methods
-1. Whitelist Management
-setWhitelist(address _account, bool _status)
-Adds or removes an address from the whitelist.
-Access: Only the contract owner.
-Parameters:
-_account: The address to add/remove from the whitelist.
-_status: Whether to add (true) or remove (false) the address.
-Emits: Whitelisted(_account, _status)
-2. NFT Threshold Management
-setNFTThreshold(uint256 _newThreshold)
-Updates the minimum contribution required to receive an NFT.
-Access: Only the contract owner.
-Parameters:
-_newThreshold: The new threshold value (in wei).
-Emits: NFTThresholdUpdated(_newThreshold)
-3. Campaign Creation
-createCampaign(string memory _title, string memory _description, uint256 _goal, uint256 _duration)
-Creates a new crowdfunding campaign.
-Access: Only whitelisted addresses.
-Parameters:
-_title: The title of the campaign.
-_description: A description of the campaign.
-_goal: The funding goal (in wei).
-_duration: The duration of the campaign (in seconds).
-Requirements:
-_goal > 0
-_duration > 0
-Emits: CampaignCreated(campaignId, msg.sender, _title, _goal, _duration)
-4. Contributions
-contribute(uint256 _campaignId)
-Allows users to contribute to a campaign.
-Access: Public.
-Parameters:
-_campaignId: The ID of the campaign to contribute to.
-Value: The contribution amount (in wei).
-Requirements:
-_campaignId must exist.
-Contribution must be greater than zero.
-The campaign must not have ended.
-Funds must not have been withdrawn.
-Behavior:
-If the user's total contribution exceeds nftThreshold, an NFT is minted.
-Emits: Funded(_campaignId, msg.sender, msg.value) and optionally NFTMinted(msg.sender, tokenId).
-5. Fund Withdrawal
-withdrawFunds(uint256 _campaignId)
-Allows the campaign creator to withdraw funds after the campaign ends.
-Access: Only the campaign creator.
-Parameters:
-_campaignId: The ID of the campaign.
-Requirements:
-The campaign must have ended.
-The refund period must have expired (15 days after the deadline) or the goal must have been met.
-Funds must not have been withdrawn already.
-Emits: Withdrawn(_campaignId, amount)
-6. Refunds
-refund(uint256 _campaignId)
-Allows contributors to request refunds if the campaign fails.
-Access: Public.
-Parameters:
-_campaignId: The ID of the campaign.
-Requirements:
-The campaign must have ended.
-The refund period must not have expired (15 days after the deadline).
-The campaign must have failed to meet its goal.
-The contributor must have contributed funds.
-Behavior: Refunds the contributor's entire contribution.
-7. Campaign Details
-getCampaign(uint256 _campaignId)
-Retrieves the details of a specific campaign.
-Access: Public.
-Parameters:
-_campaignId: The ID of the campaign.
-Returns:
-creator: The address of the campaign creator.
-title: The title of the campaign.
-description: A description of the campaign.
-goal: The funding goal (in wei).
-deadline: The campaign deadline timestamp.
-fundsRaised: The total funds raised so far.
-withdrawn: Whether the funds have been withdrawn.
-8. Funds Raised
-getFundsRaised(uint256 _campaignId)
-Retrieves the total funds raised for a specific campaign.
-Access: Public.
-Parameters:
-_campaignId: The ID of the campaign.
-Returns: The total funds raised (in wei).
-9. Internal Functions
-_mintNFT(address recipient)
-Mints an NFT for a contributor.
-Access: Internal.
-Parameters:
-recipient: The address of the recipient.
-Behavior: Mints an NFT with a unique tokenId.
-Emits: NFTMinted(recipient, tokenId)
+---
+
+## Tabla de Contenidos
+
+- [Resumen](#resumen)
+- [Introducción](#introducción)
+- [Problema y Oportunidad](#problema-y-oportunidad)
+- [Arquitectura del Sistema](#arquitectura-del-sistema)
+- [Detalles Técnicos del Contrato](#detalles-técnicos-del-contrato)
+- [Mecanismo de Incentivos (NFT)](#mecanismo-de-incentivos-nft)
+- [Seguridad y Transparencia](#seguridad-y-transparencia)
+- [Impacto y Beneficios para la Comunidad](#impacto-y-beneficios-para-la-comunidad)
+- [Futuro y Roadmap](#futuro-y-roadmap)
+- [Tecnologías Utilizadas](#tecnologías-utilizadas)
+- [Instalación y Ejecución](#instalación-y-ejecución)
+- [Demo y Capturas de Pantalla](#demo-y-capturas-de-pantalla)
+- [Guía de Uso y Casos de Uso](#guía-de-uso-y-casos-de-uso)
+- [Contribuciones](#contribuciones)
+- [Licencia](#licencia)
+- [Contacto y Redes](#contacto-y-redes)
+- [Notas Adicionales y Agradecimientos](#notas-adicionales-y-agradecimientos)
+
+---
+
+## Resumen
+
+La plataforma utiliza tecnología blockchain para gestionar campañas de crowdfunding de forma descentralizada y transparente. A través de contratos inteligentes, se asegura que cada donación se registre de manera inmutable y se utilicen mecanismos automatizados para el retiro de fondos o reembolsos, según el resultado de cada campaña. Además, se premia a los donantes con tokens NFT que reconocen su compromiso y contribución acumulativa. **Cabe destacar que el NFT se emite no solo al alcanzar una donación única significativa, sino también al acumular aportes recurrentes que superen un umbral predefinido.**
+
+---
+
+## Introducción
+
+Los bomberos enfrentan riesgos constantes y requieren recursos para equipamiento, capacitación y respuesta rápida ante emergencias. Sin embargo, la falta de transparencia y eficiencia en los procesos tradicionales de recaudación de fondos limita el apoyo necesario. Esta plataforma resuelve esos problemas utilizando contratos inteligentes en blockchain para gestionar campañas, garantizando transparencia, seguridad y eficiencia.
+
+---
+
+## Problema y Oportunidad
+
+### Desafíos Actuales
+
+- **Transparencia Limitada:** Los métodos tradicionales no permiten rastrear de forma pública el destino de los fondos.
+- **Procesos Ineficientes:** La gestión manual retrasa la entrega de recursos urgentes.
+- **Falta de Incentivos:** Los donantes a menudo no reciben un reconocimiento por su aporte.
+
+### Oportunidades
+
+- **Registro Inmutable:** Toda transacción se almacena en la blockchain, facilitando auditorías.
+- **Automatización:** Los contratos inteligentes automatizan el retiro y reembolso de fondos.
+- **Reconocimiento Integral:** La emisión de NFTs recompensa tanto donaciones únicas como contribuciones acumulativas, incentivando la participación continua.
+
+---
+
+## Arquitectura del Sistema
+
+La plataforma se basa en un contrato inteligente desarrollado en Solidity, apoyándose en librerías de OpenZeppelin para garantizar robustez y seguridad. Los componentes clave incluyen:
+
+- **Campañas de Donación:** Estructuras que contienen el creador, objetivo financiero, plazos de contribución y un periodo adicional de 15 días para reembolsos o retiros.
+- **Registro de Contribuciones:** Almacenamiento del monto total aportado por cada donante en cada campaña.
+- **Sistema de Whitelist:** Solo usuarios autorizados pueden crear campañas.
+- **Mecanismos Automatizados:** Funciones para contribuir, retirar fondos o solicitar reembolsos, y emisión de NFTs cuando se cumplen los criterios establecidos.
+
+---
+
+## Detalles Técnicos del Contrato
+
+El contrato `FirefighterCrowdfunding` implementa:
+
+- **Creación de Campañas:**  
+  Usuarios en whitelist pueden crear campañas especificando título, descripción, objetivo y duración. Cada campaña establece un periodo adicional de 15 días tras su cierre para gestionar los reembolsos o el retiro de fondos.
+
+- **Contribución y Registro:**  
+  Las donaciones se registran de forma individual y se suman para determinar si se alcanza el umbral requerido para activar beneficios adicionales.
+
+- **Retiro y Reembolso:**  
+  Si se alcanza la meta, el creador puede retirar los fondos después de la campaña. De lo contrario, los donantes pueden solicitar un reembolso durante el periodo establecido.
+
+- **Integración de NFTs:**  
+  La función interna de minting de NFTs premia a los donantes cuando su aporte acumulado supera un umbral determinado, utilizando el estándar ERC721.
+
+---
+
+## Mecanismo de Incentivos (NFT)
+
+El sistema de incentivos NFT ha sido diseñado para reconocer el compromiso de los donantes de manera integral:
+
+- **Umbral de Contribución Acumulada:**  
+  Se establece un monto mínimo (por ejemplo, 1 ether) que, al ser superado en contribuciones acumuladas dentro de una campaña, activa la emisión automática de un NFT.
+
+- **Reconocimiento Integral:**  
+  No solo se mintea el NFT por una única donación significativa, sino que también se consideran las contribuciones recurrentes de cada donante. Esto significa que la suma de múltiples aportes puede alcanzar el umbral, premiando a aquellos que demuestran un compromiso sostenido con la causa.
+
+Este enfoque fomenta tanto donaciones puntuales como un apoyo continuo, fortaleciendo el vínculo entre la comunidad y los bomberos.
+
+---
+
+## Seguridad y Transparencia
+
+- **Registro Inmutable:** Toda transacción se almacena en la blockchain para facilitar auditorías y garantizar la transparencia.
+- **Protección contra Vulnerabilidades:** Se utilizan mecanismos como `ReentrancyGuard` para prevenir ataques y asegurar que las transacciones se realicen de forma segura.
+- **Control de Acceso:** La creación de campañas está restringida a usuarios autorizados mediante un sistema de whitelist.
+
+---
+
+## Impacto y Beneficios para la Comunidad
+
+- **Para los Bomberos:**  
+  Acceso rápido a fondos para mejorar equipamiento, capacitación y respuesta ante emergencias.
+
+- **Para los Donantes:**  
+  Garantía de que sus aportes se utilizan de manera correcta y transparente, además de recibir un NFT que simboliza su compromiso.
+
+- **Para la Sociedad:**  
+  Fomenta la participación ciudadana y refuerza la confianza en la gestión de donaciones para causas críticas.
+
+---
+
+## Futuro y Roadmap
+
+### Próximas Etapas
+
+- **Auditorías de Seguridad:** Realización de auditorías externas para fortalecer la confianza en el sistema.
+- **Integración Multiplataforma:** Desarrollo de aplicaciones móviles y portales web para facilitar el seguimiento en tiempo real.
+- **Expansión del Ecosistema NFT:** Implementación de beneficios adicionales para los poseedores de NFTs, como acceso a eventos exclusivos y reconocimientos especiales.
+
+### Visión a Largo Plazo
+
+Crear una red colaborativa que conecte a comunidades, organizaciones y gobiernos para transformar la gestión de donaciones y potenciar el apoyo a los bomberos a nivel global.
+
+---
+
+## Tecnologías Utilizadas
+
+- **Lenguaje:** Solidity (v0.8.19)
+- **Frameworks/Libs:** OpenZeppelin Contracts, Hardhat/Truffle (para testing y despliegue)
+- **Frontend (si aplica):** React, Next.js, Ethers.js
+- **Blockchain:** Ethereum (Testnet/Mainnet)
+- **Herramientas:** MetaMask, Ganache
+
+---
+
+## Demo y Capturas de Pantalla
+
+Si deseas ver la plataforma en acción, visita la demo en vivo o revisa las capturas de pantalla:
+
+- [Ver Demo en Vivo](https://bomberos-blockchain.vercel.app/)
+
+---
+
+## Guía de Uso y Casos de Uso
+
+### Creación de Campañas
+
+- **Usuarios Autorizados:**  
+  Solo aquellos en whitelist pueden crear campañas.
+
+- **Definición de la Campaña:**  
+  El usuario define título, descripción, meta de recaudación y duración.
+
+- **Período Adicional:**  
+  Se establece un periodo extra de 15 días para gestionar retiros o reembolsos.
+
+### Contribución
+
+- **Donaciones:**  
+  Los usuarios pueden contribuir a las campañas activas.
+
+- **Registro de Aportes:**  
+  Se suma el monto de cada donante y, al superar el umbral acumulado, se emite un NFT.
+
+### Retiro y Reembolso
+
+- **Retiro:**  
+  Si la campaña es exitosa y alcanza la meta, el creador retira los fondos tras el cierre del período.
+
+- **Reembolso:**  
+  Si no se alcanza la meta, los donantes pueden solicitar el reembolso durante el periodo establecido.
+
+---
+
+## Contribuciones
+
+Si deseas contribuir a este proyecto:
+
+1. Realiza un fork del repositorio.
+2. Crea una nueva rama para tu feature o bug fix.
+3. Envía un pull request con una descripción detallada de los cambios.
+4. Abre un issue si tienes dudas o sugerencias.
+
+---
+
+## Licencia
+
+Este proyecto se distribuye bajo la licencia MIT. Consulta el archivo [LICENSE](./LICENSE) para más detalles.
+
+---
+
+## Contacto y Redes
+
+- **Email:** tuemail@ejemplo.com
+- **GitHub:** [JuanCasimiro](https://github.com/JuanCasimiro)
+- **LinkedIn:** [JuanCasimiro](https://linkedin.com/in/JuanCasimiro)
+
+---
+
+## Notas Adicionales y Agradecimientos
+
+- **Notas:**  
+  - El NFT se emite no solo por una donación única, sino también al acumular contribuciones que superen el umbral establecido.
+  - Se agradece a la comunidad de OpenZeppelin por sus excelentes herramientas y documentación.
+
+- **Agradecimientos:**  
+  Gracias a todos los colaboradores y a la comunidad Web3 por el apoyo y feedback constante.
