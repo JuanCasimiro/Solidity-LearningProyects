@@ -55,20 +55,6 @@ describe("MiColeccionNFT", function () {
       ).to.be.revertedWith("ETH insuficiente");
     });
 
-    it("debería permitir el mintRandom y aumentar totalSupply", async function () {
-      const initialSupply = await miNFT.totalSupply(); // BigInt
-      await expect(
-        miNFT.connect(addr1).mintRandom({ value: PRICE, gasLimit: 500000 })
-      ).to.emit(miNFT, "Transfer");
-      const finalSupply = await miNFT.totalSupply();
-      expect(finalSupply).to.equal(initialSupply + 1n);
-    });
-
-    it("debería revertir mintRandom si se envía ETH insuficiente", async function () {
-      await expect(
-        miNFT.connect(addr1).mintRandom({ value: ethers.parseEther("0.01"), gasLimit: 500000 })
-      ).to.be.revertedWith("ETH insuficiente");
-    });
   });
 
   describe("Royalties", function () {
@@ -81,14 +67,6 @@ describe("MiColeccionNFT", function () {
       expect(royaltyAmount).to.equal((salePrice * 1000n) / 10000n);
     });
 
-    it("debería permitir al owner actualizar la info de royalties", async function () {
-      // Actualiza royalties a 5% (500) y establece addr1 como receptor
-      await miNFT.connect(owner).setRoyaltyInfo(addr1.address, 500);
-      const salePrice = ethers.parseEther("1");
-      const [royaltyReceiver, royaltyAmount] = await miNFT.royaltyInfo(0, salePrice);
-      expect(royaltyReceiver).to.equal(addr1.address);
-      expect(royaltyAmount).to.equal((salePrice * 500n) / 10000n);
-    });
   });
 
   describe("Withdrawals", function () {

@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
     struct Campaign {
+        uint256 id; // Nueva propiedad id
         address payable creator;
         string title;
         string description;
@@ -16,7 +17,6 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
         uint256 claimDeadline; // Nuevo parámetro para el plazo de 15 días
         uint256 fundsRaised;
         bool withdrawn;
-        string imageURL;
     }
 
     mapping(uint256 => Campaign) public campaigns;
@@ -58,8 +58,9 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
         require(_duration > 0, "Duration must be greater than zero");
         
         campaignCount++;
-        uint256 campaignDeadline = block.timestamp + _duration;
+        uint256 campaignDeadline = block.timestamp + (_duration * 1 days);
         campaigns[campaignCount] = Campaign(
+            campaignCount, // Asignar el id de la campaña
             payable(msg.sender),
             _title,
             _description,
@@ -70,16 +71,15 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
             false
         );
         
-        emit CampaignCreated(campaignCount, msg.sender, _title, _goal, _duration);
+        emit CampaignCreated(campaignCount, msg.sender, _title, _goal, campaignDeadline);
     }
     
-    function contribute(uint256 _campaignId) public payable nonReentrant{
+    function contribute(uint256 _campaignId) public payable nonReentrant {
         require(_campaignId > 0 && _campaignId <= campaignCount, "Campaign does not exist");
         require(msg.value > 0, "Contribution must be greater than zero");
         require(block.timestamp < campaigns[_campaignId].deadline, "Campaign has ended");
         require(!campaigns[_campaignId].withdrawn, "Funds already withdrawn");
 
-        
         campaigns[_campaignId].fundsRaised += msg.value;
         contributions[_campaignId][msg.sender] += msg.value;
         
@@ -88,7 +88,6 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
             _mintNFT(msg.sender);
             nftClaimed[_campaignId][msg.sender] = true;
         }
-
         
         emit Funded(_campaignId, msg.sender, msg.value);
     }
@@ -149,6 +148,7 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
     }
 
     function getCampaign(uint256 _campaignId) public view returns (
+        uint256 id,
         address creator, 
         string memory title, 
         string memory description, 
@@ -159,6 +159,7 @@ contract FirefighterCrowdfunding is Ownable, ERC721, ReentrancyGuard {
     ) {
         Campaign storage campaign = campaigns[_campaignId];
         return (
+            campaign.id,
             campaign.creator,
             campaign.title,
             campaign.description,
